@@ -1,0 +1,148 @@
+import hashlib
+import time
+
+#  Класс Block — одна "страница" в нашем реестре
+class Block:
+    def __init__(self, index, data, previous_hash):
+        self.index         = index          # позиция этого блока в цепочке
+        self.timestamp     = time.time()    # время создания блока
+        self.data          = data           # что мы хотим сохранить (транзакция, сообщение и т.д.)
+        self.previous_hash = previous_hash  # хеш блока перед этим
+        self.nonce         = 0              # счётчик, используемый для доказательства работы
+
+        # вычисляем хеш ПОСЛЕ установки всех остальных полей
+        self.hash = self.calculate_hash()
+
+    def calculate_hash(self):
+        """Объединяет все поля блока в одну строку и хеширует её с помощью SHA-256."""
+        block_contents = (
+            str(self.index)
+            + str(self.timestamp)
+            + str(self.data)
+            + str(self.previous_hash)
+            + str(self.nonce)
+        )
+        return hashlib.sha256(block_contents.encode()).hexdigest()
+
+    def mine_block(self, difficulty):
+        """
+        Доказательство работы: продолжаем менять нонс, пока хеш
+        не начнётся с достаточного количества нулей (определяется 'сложностью').
+        """
+        target = "0" * difficulty  # например, сложность=4 → цель = "0000"
+
+        while not self.hash.startswith(target):
+            self.nonce += 1
+            self.hash = self.calculate_hash()
+
+        print(f"  Block {self.index} mined!  nonce={self.nonce}  hash={self.hash}")
+
+    def __repr__(self):
+        """Красиво выводит блок при использовании print()."""
+        return (
+            f"\n{'='*60}\n"
+            f"  Block #{self.index}\n"
+            f"  Timestamp    : {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.timestamp))}\n"
+            f"  Data         : {self.data}\n"
+            f"  Nonce        : {self.nonce}\n"
+            f"  Prev Hash    : {self.previous_hash}\n"
+            f"  Hash         : {self.hash}\n"
+            f"{'='*60}"
+        )
+
+
+
+#  Класс Blockchain — полная цепочка
+class Blockchain:
+    def __init__(self):
+        self.difficulty = 4          # требуем хеши, которые начинаются с "0000"
+        self.chain = []              # список, который хранит все наши блоки
+        self.chain.append(self.create_genesis_block())
+
+    def create_genesis_block(self):
+        """
+        Самый первый блок называется 'генезис-блок'.
+        У него нет предыдущего блока, поэтому мы используем "0" как заполнитель хеша.
+        """
+        print("Creating genesis block...")
+        genesis = Block(index=0, data="Genesis Block", previous_hash="0")
+        genesis.mine_block(self.difficulty)
+        return genesis
+
+    def get_last_block(self):
+        """Возвращает самый последний блок в цепочке."""
+        return self.chain[-1]
+
+    def add_block(self, data):
+        """
+        Создаёт новый блок с указанными данными,
+        связывает его с предыдущим блоком и добавляет в цепочку.
+        """
+        new_block = Block(
+            index         = len(self.chain),
+            data          = data,
+            previous_hash = self.get_last_block().hash   # связываем с предыдущим блоком
+        )
+        new_block.mine_block(self.difficulty)
+        self.chain.append(new_block)
+
+    def is_chain_valid(self):
+        """
+        Проходит по каждому блоку и проверяет два условия:
+          1. Сохранённый хеш блока всё ещё совпадает с только что вычисленным хешем
+             (убеждаемся, что никто не изменял содержимое блока).
+          2. Хеш предыдущего блока в текущем блоке совпадает с фактическим хешем предыдущего блока
+             (убеждаемся, что связи между блоками целы).
+        """
+        for i in range(1, len(self.chain)):
+            current_block  = self.chain[i]
+            previous_block = self.chain[i - 1]
+
+            # проверка 1 — не был ли блок изменён?
+            if current_block.hash != current_block.calculate_hash():
+                print(f"  ❌  Block #{i} has been tampered with! Its hash is invalid.")
+                return False
+
+            # проверка 2 — правильно ли он связан с предыдущим блоком?
+            if current_block.previous_hash != previous_block.hash:
+                print(f"  ❌  Block #{i} is not properly linked to block #{i - 1}!")
+                return False
+
+        return True
+
+
+
+# ДЕМОНСТРАЦИЯ
+
+
+print("\n" + "─"*60)
+print("         ПРОСТАЯ ДЕМОНСТРАЦИЯ БЛОКЧЕЙНА")
+print("─"*60 + "\n")
+
+# 1. Создаём блокчейн (генезис-блок создаётся автоматически)
+my_blockchain = Blockchain()
+
+# 2. Добавляем три блока с вымышленными данными транзакций
+print("\nAdding blocks to the chain...")
+my_blockchain.add_block({"sender": "Алиса",   "receiver": "Антон",     "amount": 50})
+my_blockchain.add_block({"sender": "Антон",     "receiver": "Светлана", "amount": 25})
+my_blockchain.add_block({"sender": "Светлана", "receiver": "Алиса",   "amount": 10})
+
+# 3. Отображаем каждый блок в цепочке
+print("\n\n── Полный блокчейн ──")
+for block in my_blockchain.chain:
+    print(block)
+
+# 4. Проверяем, что цепочка действительна (должна быть)
+print("\n\n── Проверка целостности (нетронутая цепочка) ──")
+if my_blockchain.is_chain_valid():
+    print(" ЦЕПОЧКА действительна - изменений не обнаружено. \n")
+
+# 5. Вносим изменения в блок #1 и проверяем снова
+print("── Вносим изменения в блок #1 ──")
+my_blockchain.chain[1].data = {"sender": "Алиса", "receiver": "Антон", "amount": 9999}
+print("  Данные блока номер 1 изменены на сумму 9999! \n")
+
+print("── Проверка целостности (после изменения) ──")
+if not my_blockchain.is_chain_valid():
+    print(" ЦЕПОЧКА недействительна - обнаружены изменения! \n")
