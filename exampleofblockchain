@@ -23,8 +23,7 @@ class Block:
         return hashlib.sha256(block_contents.encode()).hexdigest()
 
     def mine_block(self, difficulty):
-        target = "0" * difficulty  # например, сложность=4 → цель = "0000"
-
+        target = "0" * difficulty 
         while not self.hash.startswith(target):
             self.nonce += 1
             self.hash = self.calculate_hash()
